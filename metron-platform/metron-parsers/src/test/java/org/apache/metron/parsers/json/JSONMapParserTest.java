@@ -140,4 +140,64 @@ public class JSONMapParserTest {
     Assert.assertNotNull(message.get("timestamp"));
     Assert.assertTrue(message.get("timestamp") instanceof Number );
   }
+
+  /*
+   empty list-item will be ignored, but the index still increases
+   data[1]
+   data[3]
+   because data 2 is empty
+
+   nested lists will be showed as data[0][1]
+
+   need 3 more unit tests about
+   --list index order
+   --skipping empty index number
+   --nested lists
+   */
+  /**
+    {
+      "my_array": [
+        "a_string",
+        true,
+        10,
+        {},
+        [],
+        [
+          "inner_list_item_1",
+          "inner_list_item_2",
+          {
+            "inner_list_object": "inner_list_object_value"
+          }
+        ],
+        {
+          "inner_object_field": "inner_object_field_value",
+          "inner_object_list": [
+            "inner_object_list_item_1",
+            {
+              "inner_object_list_object": "inner_object_list_object_value"
+            },
+            [
+              "inner_object_list_list_item_1"
+            ]
+          ]
+        }
+      ]
+    }
+   */
+  @Multiline
+  private String jd;
+
+  @Test
+  public void testJd(){
+    JSONMapParser parser = new JSONMapParser();
+    parser.configure(ImmutableMap.of(JSONMapParser.MAP_STRATEGY_CONFIG, JSONMapParser.MapStrategy.FLAT.name()));
+    List<JSONObject> output = parser.parse(jd.getBytes());
+
+    output.get(0).remove("timestamp");
+    output.get(0).remove("original_string");
+    String jsonStr = output.get(0).toJSONString();
+
+    boolean debug = true;
+
+  }
 }

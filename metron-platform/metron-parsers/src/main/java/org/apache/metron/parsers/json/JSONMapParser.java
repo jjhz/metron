@@ -45,19 +45,21 @@ public class JSONMapParser extends BasicParser {
 
   private interface Handler {
 
-    JSONObject handle(String key, Map value, JSONObject obj);
+    JSONObject handle(String key, Object value, JSONObject obj);
   }
 
   @SuppressWarnings("unchecked")
   public enum MapStrategy implements Handler {
     DROP((key, value, obj) -> obj), UNFOLD((key, value, obj) -> {
-      return recursiveUnfold(key, value, obj);
+      return recursiveUnfoldJsonCollectionField(key, value, obj, false);
     }), ALLOW((key, value, obj) -> {
       obj.put(key, value);
       return obj;
     }), ERROR((key, value, obj) -> {
       throw new IllegalStateException(
           "Unable to process " + key + " => " + value + " because value is a map.");
+    }), FLAT((key, value, obj) -> {
+      return recursiveUnfoldJsonCollectionField(key, value, obj, true);
     });
     Handler handler;
 
@@ -66,21 +68,35 @@ public class JSONMapParser extends BasicParser {
     }
 
     @SuppressWarnings("unchecked")
-    private static JSONObject recursiveUnfold(String key, Map value, JSONObject obj) {
-      Set<Map.Entry<Object, Object>> entrySet = value.entrySet();
-      for (Map.Entry<Object, Object> kv : entrySet) {
-        String newKey = Joiner.on(".").join(key, kv.getKey().toString());
-        if (kv.getValue() instanceof Map) {
-          recursiveUnfold(newKey, (Map) kv.getValue(), obj);
-        } else {
-          obj.put(newKey, kv.getValue());
+    private static JSONObject recursiveUnfoldJsonCollectionField(String key, Object value, JSONObject obj,
+        boolean unfoldList) {
+      if(value instanceof List && unfoldList) {
+        List listValue = (List) value;
+        for(int i=0;i<listValue.size();i++){
+          String newKey = key+"["+i+"]";
+          if(listValue.get(i) instanceof Map || listValue.get(i) instanceof List){
+            recursiveUnfoldJsonCollectionField(newKey,listValue.get(i),obj,unfoldList);
+          }else{
+            obj.put(newKey,listValue.get(i));
+          }
+        }
+      }
+      if(value instanceof Map) {
+        Set<Map.Entry<Object, Object>> entrySet = ((Map) value).entrySet();
+        for (Map.Entry<Object, Object> kv : entrySet) {
+          String newKey = Joiner.on(".").join(key, kv.getKey().toString());
+          if (kv.getValue() instanceof Map || kv.getValue() instanceof List) {
+            recursiveUnfoldJsonCollectionField(newKey, kv.getValue(), obj, unfoldList);
+          } else {
+            obj.put(newKey, kv.getValue());
+          }
         }
       }
       return obj;
     }
 
     @Override
-    public JSONObject handle(String key, Map value, JSONObject obj) {
+    public JSONObject handle(String key, Object value, JSONObject obj) {
       return handler.handle(key, value, obj);
     }
 
@@ -211,8 +227,8 @@ public class JSONMapParser extends BasicParser {
   private JSONObject normalizeJson(Map<String, Object> map) {
     JSONObject ret = new JSONObject();
     for (Map.Entry<String, Object> kv : map.entrySet()) {
-      if (kv.getValue() instanceof Map) {
-        mapStrategy.handle(kv.getKey(), (Map) kv.getValue(), ret);
+      if (kv.getValue() instanceof Map || kv.getValue() instanceof List) {
+        mapStrategy.handle(kv.getKey(), kv.getValue(), ret);
       } else {
         ret.put(kv.getKey(), kv.getValue());
       }
